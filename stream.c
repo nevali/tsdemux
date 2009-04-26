@@ -55,8 +55,8 @@ ts_stream_create(const ts_options_t *opts)
 	{
 		p->reallocmem = opts->reallocmem;
 	}
-	p->nit = PID_DVB_NIT;
-	p->tdt = PID_DVB_TDT;
+	p->nitpid = PID_DVB_NIT;
+	p->tdtpid = PID_DVB_TDT;
 	return p;
 }
 
@@ -178,9 +178,9 @@ ts_stream_read_packet(ts_stream_t *stream, ts_packet_t *packet, const uint8_t *b
 	packet->sync = bufp[0];
 	bufp++; /* Skip sync byte */
 //	printf("flags = %02x\n", bufp[0]);
-	packet->transerr = bufp[0] & 0x80;
-	packet->unitstart = bufp[0] & 0x40;
-	packet->priority = bufp[0] & 0x20;
+	packet->transerr = (bufp[0] & 0x80) >> 7;
+	packet->unitstart = (bufp[0] & 0x40) >> 6;
+	packet->priority = (bufp[0] & 0x20) >> 5;
 	packet->pid = ((bufp[0] & 0x1f) << 8) | bufp[1];
 	packet->sc = (bufp[2] & 0xc0) >> 6;
 	packet->hasaf = (bufp[2] & 0x20) >> 5;
@@ -190,15 +190,4 @@ ts_stream_read_packet(ts_stream_t *stream, ts_packet_t *packet, const uint8_t *b
 	packet->payloadlen = 184;
 	memcpy(packet->payload, bufp, packet->payloadlen);
 	return ts__packet_decode(packet);
-}
-
-size_t
-ts__stream_addprogs(ts_stream_t *stream, size_t nprogs)
-{
-	size_t base;
-	
-	base = stream->nprogs;
-	stream->progs = stream->reallocmem(stream->progs, sizeof(ts_prog_t) * (nprogs + base));
-	stream->nprogs += nprogs;
-	return base;
 }

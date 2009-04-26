@@ -7,7 +7,6 @@
 # define PID_PAT                       0x0000
 # define PID_CAT                       0x0001
 # define PID_TSDT                      0x0002
-
 # define PID_DVB_NIT                   0x0010
 # define PID_DVB_SDT                   0x0011
 # define PID_DVB_EIT                   0x0012
@@ -18,9 +17,7 @@
 # define PID_DVB_MEASUREMENT           0x001d
 # define PID_DVB_DIT                   0x001e
 # define PID_DVB_SIT                   0x001f
-
 # define PID_NULL                      0x1fff
-
 # define PID_UNSPEC                    0xffff
 
 # define ES_TYPE_MPEG1V                0x01
@@ -38,9 +35,12 @@
 # define ES_TYPE_DVB_SLICE             0x90
 # define ES_TYPE_DIRAC                 0xd1
 # define ES_TYPE_VC1                   0xea
+
 # define TID_PAT                       0x00
 # define TID_CAT                       0x01
 # define TID_PMT                       0x02
+# define TID_DVB_NIT                   0x40
+# define TID_DVB_ONIT                  0x41
 
 # define DESC_VIDEO                    0x02
 # define DESC_AUDIO                    0x03
@@ -56,14 +56,20 @@
 # define DESC_COPYRIGHT                0x0d
 # define DESC_MAXBITRATE               0x0e
 
+# define PT_UNSPEC                     0
+# define PT_SECTIONS                   1
+# define PT_PES                        2
+# define PT_DATA                       3
+# define PT_NULL                       4
+
 typedef struct ts_stream_struct ts_stream_t;
 typedef struct ts_options_struct ts_options_t;
 typedef struct ts_rawpacket_struct ts_rawpacket_t;
 typedef struct ts_adapt_struct ts_adapt_t;
 typedef struct ts_packet_struct ts_packet_t;
-typedef struct ts_esinfo_struct ts_esinfo_t;
+typedef struct ts_pidinfo_struct ts_pidinfo_t;
 typedef struct ts_pat_struct ts_pat_t;
-typedef struct ts_prog_struct ts_prog_t;
+typedef struct ts_pmt_struct ts_pmt_t;
 typedef struct ts_table_struct ts_table_t;
 
 struct ts_options_struct
@@ -79,20 +85,23 @@ struct ts_options_struct
 	void *(*reallocmem)(void *ptr, size_t nbytes);
 };
 
+/* ts_stream_t: represents the entire transport stream */
 struct ts_stream_struct
 {
 	const ts_options_t *opts;
 	uint64_t seq;
 	size_t lastsync;
-	ts_pat_t *pat;
-	size_t nesinfo;
-	ts_esinfo_t *esinfo;
-	uint16_t nit;
-	uint16_t tdt;
-	size_t nes;
-	ts_esinfo_t *es;
-	size_t nprogs;
-	ts_prog_t *progs;
+	/* The current program association table */
+	ts_table_t *pat;
+	/* The list of all known tables */
+	size_t ntables;
+	ts_table_t **tables;
+	/* The list of known PIDs */
+	size_t npids;
+	ts_pidinfo_t **pidinfo;
+	/* Well-known PIDs */
+	uint16_t nitpid;
+	uint16_t tdtpid;
 	void *(*allocmem)(size_t nbytes);
 	void (*freemem)(void *ptr);
 	void *(*reallocmem)(void *ptr, size_t nbytes);
@@ -100,45 +109,50 @@ struct ts_stream_struct
 
 struct ts_pat_struct
 {
-	ts_pat_t *prev;
-	uint16_t version;
-	size_t occurrences;
 	size_t nprogs;
-	size_t count;
-	ts_prog_t **progs;
+	ts_table_t **progs; /* Reference the PMT of each program */
 };
 
-struct ts_prog_struct
+struct ts_pmt_struct
 {
-	uint16_t progid;
-	uint16_t pid;
-	ts_esinfo_t **es;
+	uint16_t pcrpid;
 	size_t nes;
+	ts_pidinfo_t **es; /* Reference the elementary streams for this program */
 };
 
-struct ts_esinfo_struct
+struct ts_pidinfo_struct
 {
-	uint16_t progid;
-	uint8_t stype;
+	unsigned int seen:1;
+	unsigned int defined:1;
+	unsigned int pcr:1;
+	unsigned int pidtype;
 	uint16_t pid;
+	/* If it's a PES PID: */
+	uint16_t pmtpid; /* PID of the programme this PES relates to */
+	uint8_t stype;   /* Stream type from the PMT */
+	uint8_t streamid;
 };
 
 struct ts_adapt_struct
 {
 	uint8_t len;
-	int discontinuity:1;
-	int random:1;
-	int priority:1;
-	int pcr:1;
-	int opcr:1;
-	int splicepoint:1;
-	int privdata:1;
-	int extensions:1;
+	unsigned int discontinuity:1;
+	unsigned int random:1;
+	unsigned int priority:1;
+	unsigned int pcr:1;
+	unsigned int opcr:1;
+	unsigned int splicepoint:1;
+	unsigned int privdata:1;
+	unsigned int extensions:1;
 };
 
 struct ts_table_struct
 {
-	uint16_t progid;
+	ts_table_t *prev, *next;
+	uint16_t pid; /* The PID this table was last carried in */
+	unsigned int expected:1; /* This table hasn't been defined yet */
+	size_t occurrences;
+	uint16_t progid; /* The progid this table was associated with, via the PAT */
 	uint8_t tableid;
 	unsigned int syntax:1;
 	uint16_t seclen;
@@ -150,6 +164,11 @@ struct ts_table_struct
 	uint8_t *data;
 	size_t datalen;
 	uint32_t crc32;
+	union
+	{
+		ts_pat_t pat;
+		ts_pmt_t pmt;
+	} d;
 };
 
 struct ts_packet_struct
@@ -165,9 +184,13 @@ struct ts_packet_struct
 	int hasaf;
 	int haspd;
 	unsigned int continuity:1;
+	ts_pidinfo_t *pidinfo;
 	ts_adapt_t af; /* If hasaf is set */
-	ts_table_t *table;
+	size_t ntables;
+	ts_table_t *tables[8]; /* If this packet contains tables, pointers to them */
+	ts_table_t *curtable;
 	size_t payloadlen;
+	size_t plofs;
 	uint8_t payload[184]; /* If haspd is set */
 };
 
@@ -190,7 +213,12 @@ extern "C" {
 	 */
 	int ts_stream_read_packet(ts_stream_t *stream, ts_packet_t *dest, const uint8_t *bufp);
 	
-
+	/* Retrieve the table with the given table_id (and optional PID) */
+	ts_table_t *ts_stream_table_get(ts_stream_t *stream, uint8_t tableid, uint16_t pid);
+	
+	/* Retrieve the metadata for a particular PID */
+	ts_pidinfo_t *ts_stream_pid_get(ts_stream_t *stream, uint16_t pid);
+	
 # ifdef __cplusplus
 }
 # endif

@@ -1,6 +1,6 @@
 OUT = tsdump
 
-OBJ = tsdump.o stream.o packet.o table.o pat.o pmt.o cat.o
+OBJ = tsdump.o stream.o packet.o pid.o table.o pat.o pmt.o cat.o
 
 CFLAGS = -W -Wall -O0 -g
 

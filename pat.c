@@ -11,47 +11,50 @@ ts__pat_decode(ts_packet_t *packet)
 	uint16_t prog, pid;
 	size_t c, pc, nentry;
 	ts_pat_t *pat;
+	ts_pidinfo_t *pidinfo;
 	
-	printf("Program Association Table:\n");
-
-	if(NULL != packet->stream->pat && packet->stream->pat->version == packet->table->version)
-	{
-		printf(" -- Repeated PAT ver 0x%02x\n", packet->table->version);
-		packet->stream->pat->occurrences++;
-		return 0;
-	}
-	pat = (ts_pat_t *) packet->stream->allocmem(sizeof(ts_pat_t));
-	pat->prev = packet->stream->pat;
-	pat->occurrences = 1;
-	pat->version = packet->table->version;
-	
-	pat->nprogs = pat->count = nentry = (packet->table->seclen - 9) / 4;;
-	pat->progs = (ts_prog_t **) packet->stream->allocmem(pat->nprogs * sizeof(ts_prog_t *));
-	pc = ts__stream_addprogs(packet->stream, pat->nprogs);
-	printf(" -- Section length is 0x%02x, payload size is 0x%02x, %u entries\n", packet->table->seclen, (unsigned) packet->table->datalen, (unsigned) nentry);
+	pat = &(packet->curtable->d.pat);
+	pat->nprogs = nentry = (packet->curtable->seclen - 9) / 4;
+	pat->progs = (ts_table_t **) packet->stream->allocmem(pat->nprogs * sizeof(ts_table_t *));
 	c = 0;
-	bufp = packet->table->data; 
+	bufp = packet->curtable->data; 
 	while(nentry)
 	{
 		prog = (bufp[0] << 8) | bufp[1];
 		pid = ((bufp[2] << 8) | bufp[3]) & 0x1fff;
 		bufp += 4;
 		nentry--;
-		packet->stream->progs[pc].progid = prog;
-		packet->stream->progs[pc].pid = pid;
-		pat->progs[c] = &(packet->stream->progs[pc]);
+		if(NULL == (pat->progs[c] = ts_stream_table_get(packet->stream, TID_PMT, pid)))
+		{
+			if(0 == prog)
+			{
+				pat->progs[c] = ts__stream_table_expect(packet->stream, TID_DVB_NIT, pid);
+			}
+			else
+			{
+				pat->progs[c] = ts__stream_table_expect(packet->stream, TID_PMT, pid);
+			}
+		}
+		pat->progs[c]->progid = prog;
+		/* Add the PID entry */
+		if(NULL == (pidinfo = ts_stream_pid_get(packet->stream, pid)))
+		{
+			pidinfo = ts__stream_pid_add(packet->stream, pid);
+		}
+		if(PT_SECTIONS != pidinfo->pidtype && PT_UNSPEC != pidinfo->pidtype)
+		{
+			ts__stream_pid_reset(pidinfo);
+		}
+		pidinfo->pidtype = PT_SECTIONS;
+		pidinfo->defined = 1;
+		pat->progs[c]->progid = prog;
 		c++;
 		pc++;
 		if(0 == prog)
 		{
-			printf(" -- Network Information Table has PID 0x%04x\n", pid);
-			packet->stream->nit = pid;
-		}
-		else
-		{
-			printf(" -- Program 0x%04x has PID 0x%04x\n", prog, pid);
+			packet->stream->nitpid = pid;
 		}
 	}
-	packet->stream->pat = pat;
+	packet->stream->pat = packet->curtable;
 	return 0;
 }
