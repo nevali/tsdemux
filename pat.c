@@ -13,6 +13,11 @@ ts__pat_decode(ts_packet_t *packet)
 	ts_pat_t *pat;
 	ts_pidinfo_t *pidinfo;
 	
+	if(NULL != packet->pidinfo)
+	{
+		packet->pidinfo->pidtype = PT_SECTIONS;
+		packet->pidinfo->subtype = PST_SI;
+	}
 	pat = &(packet->curtable->d.pat);
 	pat->nprogs = nentry = (packet->curtable->seclen - 9) / 4;
 	pat->progs = (ts_table_t **) packet->stream->allocmem(pat->nprogs * sizeof(ts_table_t *));
@@ -46,6 +51,14 @@ ts__pat_decode(ts_packet_t *packet)
 			ts__stream_pid_reset(pidinfo);
 		}
 		pidinfo->pidtype = PT_SECTIONS;
+		if(0 == prog)
+		{
+			pidinfo->subtype = PST_NI;
+		}
+		else
+		{
+			pidinfo->subtype = PST_SI;
+		}
 		pidinfo->defined = 1;
 		pat->progs[c]->progid = prog;
 		c++;

@@ -27,8 +27,20 @@
 # define ES_TYPE_PRIVATESECTS          0x05
 # define ES_TYPE_PRIVATEDATA           0x06
 # define ES_TYPE_MHEG                  0x07
+# define ES_TYPE_DSMCC                 0x08
+# define ES_TYPE_AUXILIARY             0x09
+# define ES_TYPE_DSMCC_ENCAP           0x0a
 # define ES_TYPE_DSMCC_UN              0x0b
 # define ES_TYPE_AAC                   0x0f
+# define ES_TYPE_MPEG4V                0x10
+# define ES_TYPE_LATM_AAC              0x11
+# define ES_TYPE_MPEG4_GENERIC         0x12
+/* Unknown 0x13 */
+# define ES_TYPE_DSMCC_DOWNLOAD        0x14
+/* Unknown 0x15 */
+/* Unknown 0x16 */
+/* Unknown 0x17 */
+/* Unknown 0x1a */
 # define ES_TYPE_H264                  0x1b
 # define ES_TYPE_AC3                   0x81
 # define ES_TYPE_EAC3                  0x87
@@ -62,6 +74,15 @@
 # define PT_DATA                       3
 # define PT_NULL                       4
 
+# define PST_UNSPEC                    0
+# define PST_VIDEO                     1
+# define PST_AUDIO                     2
+# define PST_INTERACTIVE               3
+# define PST_CC                        4
+# define PST_IP                        5
+# define PST_SI                        6
+# define PST_NI                        7
+
 typedef struct ts_stream_struct ts_stream_t;
 typedef struct ts_options_struct ts_options_t;
 typedef struct ts_rawpacket_struct ts_rawpacket_t;
@@ -71,6 +92,7 @@ typedef struct ts_pidinfo_struct ts_pidinfo_t;
 typedef struct ts_pat_struct ts_pat_t;
 typedef struct ts_pmt_struct ts_pmt_t;
 typedef struct ts_table_struct ts_table_t;
+typedef struct ts_streamtype_struct ts_streamtype_t;
 
 struct ts_options_struct
 {
@@ -126,6 +148,7 @@ struct ts_pidinfo_struct
 	unsigned int defined:1;
 	unsigned int pcr:1;
 	unsigned int pidtype;
+	unsigned int subtype;
 	uint16_t pid;
 	/* If it's a PES PID: */
 	uint16_t pmtpid; /* PID of the programme this PES relates to */
@@ -194,6 +217,15 @@ struct ts_packet_struct
 	uint8_t payload[184]; /* If haspd is set */
 };
 
+struct ts_streamtype_struct
+{
+	uint8_t stype;
+	uint8_t pidtype;
+	uint8_t subtype;
+	const char *name;
+	const char *mime;
+	const char *ext;
+};
 
 # ifdef __cplusplus
 extern "C" {
@@ -218,6 +250,9 @@ extern "C" {
 	
 	/* Retrieve the metadata for a particular PID */
 	ts_pidinfo_t *ts_stream_pid_get(ts_stream_t *stream, uint16_t pid);
+
+	/* Retrieve information about a given defined stream type */
+	const ts_streamtype_t *ts_typeinfo(uint8_t stype);
 	
 # ifdef __cplusplus
 }

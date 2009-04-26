@@ -48,6 +48,7 @@ dumppmt(ts_stream_t *stream, ts_table_t *table)
 {
 	size_t c;
 	ts_pidinfo_t *info;
+	const ts_streamtype_t *stype;
 	
 	printf("  0x%04x - Program 0x%04x\n",  (unsigned int) table->pid, (unsigned int) table->progid);
 	if(1 == table->expected)
@@ -60,35 +61,35 @@ dumppmt(ts_stream_t *stream, ts_table_t *table)
 	{
 		info = table->d.pmt.es[c];
 		printf("    0x%04x - ", info->pid);
-		switch(info->stype)
+		if(NULL == (stype = ts_typeinfo(info->stype)))
 		{
-			case ES_TYPE_MPEG1V: printf("MPEG-1 video"); break;
-			case ES_TYPE_MPEG2V: printf("MPEG-2 video"); break;
-			case ES_TYPE_MPEG1A: printf("MPEG-1 audio"); break;
-			case ES_TYPE_MPEG2A: printf("MPEG-2 audio"); break;
-			case ES_TYPE_PRIVATESECTS: printf("Private"); break;
-			case ES_TYPE_PRIVATEDATA: printf("Private"); break;
-			case ES_TYPE_MHEG: printf("MHEG-5 data"); break;
-			case ES_TYPE_DSMCC_UN: printf("DCM-CC U/N data"); break;
-			case ES_TYPE_AAC: printf("AAC audio"); break;
-			case ES_TYPE_H264: printf("H.264 video"); break;
-			case ES_TYPE_AC3: printf("AC3 audio"); break;
-			case ES_TYPE_EAC3: printf("EAC3 audio"); break;
-			case ES_TYPE_DIRAC: printf("Dirac/VC-2 video"); break;
-			case ES_TYPE_VC1: printf("WMV9/VC-1 video"); break;
-			default:
-				printf("Unknown stream type 0x%02x", info->stype);
+			printf("Unknown stream type 0x%02x", info->stype);
+		}
+		else
+		{
+			printf("%s", stype->name);
+		}
+		switch(info->subtype)
+		{
+			case PST_UNSPEC: printf(" unspecified"); break;
+			case PST_VIDEO: printf(" video"); break;
+			case PST_AUDIO: printf(" audio"); break;
+			case PST_INTERACTIVE: printf(" interactive"); break;
+			case PST_CC: printf(" closed captioning"); break;
+			case PST_IP: printf(" Internet Protocol"); break;
+			case PST_SI: printf(" stream information"); break;
+			case PST_NI: printf(" network information"); break;
 		}
 		switch(info->pidtype)
 		{
 			case PT_SECTIONS:
-				printf(" [sections]");
+				printf(" sections");
 				break;
 			case PT_DATA:
-				printf(" [data]");
+				printf(" data");
 				break;
 			case PT_PES:
-				printf(" [PES]");
+				printf(" PES");
 				break;
 		}
 		if(1 == info->pcr)
