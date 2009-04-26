@@ -57,7 +57,11 @@ dumpdvbnit(ts_stream_t *stream, ts_table_t *table, int complete)
 	printf("  0x%04x - DVB Network Information Table 0x%02x\n", (unsigned int) table->pid, table->tableid);
 	if(1 == table->expected)
 	{
-		printf("  - Table defined but not present in stream\n");
+		if(1 == complete)
+		{
+			printf("  - Table defined but not present in stream\n");
+		}
+		return 0;
 	}
 	return 0;
 }
@@ -78,7 +82,10 @@ dumppmt(ts_stream_t *stream, ts_table_t *table, int complete)
 	printf("  0x%04x - Program 0x%04x\n",  (unsigned int) table->pid, (unsigned int) table->progid);
 	if(1 == table->expected)
 	{
-		printf("  - Table defined but not present in stream\n");
+		if(1 == complete)
+		{
+			printf("  - Table defined but not present in stream\n");
+		}
 		return 0;
 	}
 	printf("  - Table contains details of %lu streams\n", (unsigned long) table->d.pmt.nes);
@@ -135,7 +142,7 @@ dumppat(ts_stream_t *stream, ts_table_t *table, int complete)
 {
 	size_t c;
 	
-	printf("0x%04x - Program Association Table:\n", (unsigned int) table->pid);
+	printf("0x%04x - Program Association Table\n", (unsigned int) table->pid);
 	if(1 == table->expected)
 	{
 		if(1 == complete)
@@ -181,6 +188,7 @@ usage(const char *progname)
 	printf("  -s           Print a summary of the stream once complete\n");
 	printf("  -a           Attempt to automatically sync the stream\n");
 	printf("  -A           Source stream is AVCHD/Blu-Ray (disables -a)\n");
+	printf("  -q           Halt as soon as the first PAT and PMT have been decoded\n");
 	printf("\nIf no options are specified, defaults are to autosync (-a) and print a\n"
 		"final summary (-s).\n");
 }
@@ -188,12 +196,14 @@ usage(const char *progname)
 int
 main(int argc, char **argv)
 {
-	int showhex, showpackets, showsummary, showdetail;
+	int showhex, showpackets, showsummary, showdetail, quick;
 	int c, r;
 	FILE *fin;
 	ts_stream_t *stream;
 	ts_options_t options;
 	ts_packet_t packet;
+	size_t pmtcount;
+	int patseen;
 	
 	memset(&options, 0, sizeof(options));
 	options.progname = argv[0];
@@ -207,7 +217,8 @@ main(int argc, char **argv)
 	showpackets = 0;
 	showdetail = 0;
 	showsummary = -1;
-	while(-1 != (c = getopt(argc, argv, "hpHdsaA")))
+	quick = 0;
+	while(-1 != (c = getopt(argc, argv, "hpHdsaAq")))
 	{
 		switch(c)
 		{
@@ -230,6 +241,9 @@ main(int argc, char **argv)
 			case 'A':
 				options.autosync = 0;
 				options.timecode = 1;
+				break;
+			case 'q':
+				quick = 1;
 				break;
 			case 'h':
 				usage(options.progname);
@@ -255,8 +269,10 @@ main(int argc, char **argv)
 		usage(options.progname);
 		return 1;
 	}
+	pmtcount = 0;
+	patseen = 0;
 	stream = ts_stream_create(&options);
-	for(c = 1; c < argc; c++)
+	for(c = optind; c < argc; c++)
 	{
 		if(argv[c][0] == '-' && argv[c][1] == 0)
 		{
@@ -274,7 +290,6 @@ main(int argc, char **argv)
 		}
 		if(fin)
 		{
-			fprintf(stderr, "%s: Reading from %s\n", options.filename, argv[0]);
 			while(-1 != ts_stream_read_packetf(stream, &packet, fin))
 			{
 				if(packet.sync != 0x47)
@@ -354,6 +369,20 @@ main(int argc, char **argv)
 						dumptable(stream, packet.curtable, 0);
 					}
 				}
+				if(packet.curtable && TID_PMT == packet.curtable->tableid)
+				{
+					pmtcount++;
+				}
+				else if(packet.curtable && TID_PAT == packet.curtable->tableid)
+				{
+					patseen = 1;
+				}
+				if(1 == quick && patseen && pmtcount)
+				{
+					/* We've read a PAT and at least one PMT, bail out */
+					c = argc;
+					break;
+				}
 			}
 			if(fin != stdin)
 			{
@@ -370,7 +399,7 @@ main(int argc, char **argv)
 		}
 		else
 		{
-			dumptable(stream, stream->pat, 1);
+			dumptable(stream, stream->pat, (quick ? 2 : 1));
 		}
 	}
 	return r;

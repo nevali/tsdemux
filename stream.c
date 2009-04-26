@@ -109,7 +109,7 @@ ts_stream_read_packetf(ts_stream_t *stream, ts_packet_t *packet, FILE *src)
 			else if(bp != 0xFFFF)
 			{
 				/* Sync byte occurred early */
-				fprintf(stderr, "Retraining; sync occurred at relative 0x%02x, expected at 0x%02x\n", (uint8_t) bp, (uint8_t) stream->lastsync);
+				fprintf(stderr, "%s: Retraining; sync occurred at relative 0x%02x, expected at 0x%02x\n", stream->opts->filename, (uint8_t) bp, (uint8_t) stream->lastsync);
 				if(bp)
 				{
 					/* Move everything from &bufp[bp] back to the start of the
@@ -141,7 +141,7 @@ ts_stream_read_packetf(ts_stream_t *stream, ts_packet_t *packet, FILE *src)
 			}
 			if(stream->lastsync != c)
 			{
-				fprintf(stderr, "Autosync, skipped %lu bytes\n", (unsigned long) c);
+				fprintf(stderr, "%s: skipped %lu bytes (autosync)\n", stream->opts->filename, (unsigned long) c);
 			}
 			stream->lastsync = c;
 			bufp[0] = n;
