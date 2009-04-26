@@ -13,8 +13,11 @@
 
 #include "tsdemux.h"
 
-int
-ts_hexdump(ts_packet_t *packet)
+static int hexdump(ts_packet_t *packet);
+static int dumptable(ts_stream_t *stream, ts_table_t *table, int complete);
+
+static int
+hexdump(ts_packet_t *packet)
 {
 	size_t c, d;
 	uint8_t *bp;
@@ -43,13 +46,35 @@ ts_hexdump(ts_packet_t *packet)
 	return 0;
 }
 
-int
-dumppmt(ts_stream_t *stream, ts_table_t *table)
+static int
+dumpdvbnit(ts_stream_t *stream, ts_table_t *table, int complete)
+{
+	if(0 == complete && 1 == table->expected)
+	{
+		printf("  0x%04x - DVB Network Information Table 0x%02x (not yet defined)\n", (unsigned int) table->pid, table->tableid);
+		return 0;
+	}
+	printf("  0x%04x - DVB Network Information Table 0x%02x\n", (unsigned int) table->pid, table->tableid);
+	if(1 == table->expected)
+	{
+		printf("  - Table defined but not present in stream\n");
+	}
+	return 0;
+}
+
+
+static int
+dumppmt(ts_stream_t *stream, ts_table_t *table, int complete)
 {
 	size_t c;
 	ts_pidinfo_t *info;
 	const ts_streamtype_t *stype;
 	
+	if(0 == complete && 1 == table->expected)
+	{
+		printf("  0x%04x - Program 0x%04x (not yet defined)\n",  (unsigned int) table->pid, (unsigned int) table->progid);
+		return 0;
+	}
 	printf("  0x%04x - Program 0x%04x\n",  (unsigned int) table->pid, (unsigned int) table->progid);
 	if(1 == table->expected)
 	{
@@ -96,7 +121,7 @@ dumppmt(ts_stream_t *stream, ts_table_t *table)
 		{
 			printf(" (PCR)");
 		}
-		if(0 == info->seen)
+		if(1 == complete && 0 == info->seen)
 		{
 			printf(" (defined but not present)");
 		}
@@ -105,34 +130,65 @@ dumppmt(ts_stream_t *stream, ts_table_t *table)
 	return 0;
 }
 
-int
-dumppat(ts_stream_t *stream, ts_table_t *table)
+static int
+dumppat(ts_stream_t *stream, ts_table_t *table, int complete)
 {
 	size_t c;
 	
 	printf("0x%04x - Program Association Table:\n", (unsigned int) table->pid);
 	if(1 == table->expected)
 	{
-		printf("- Table defined but not present in stream\n");
+		if(1 == complete)
+		{
+			printf("- Table defined but not present in stream\n");
+		}
 		return 0;
 	}
 	for(c = 0; c < table->d.pat.nprogs; c++)
 	{
-		if(0 == table->d.pat.progs[c]->progid)
-		{
-			printf("  0x%04x - Network Information Table\n", table->d.pat.progs[c]->pid);
-		}
-		else
-		{
-			dumppmt(stream, table->d.pat.progs[c]);
-		}
+		dumptable(stream, table->d.pat.progs[c], complete);
 	}
 	return 0;
 }
 
 int
+dumptable(ts_stream_t *stream, ts_table_t *table, int complete)
+{
+	switch(table->tableid)
+	{
+		case TID_PAT:
+			return dumppat(stream, table, complete);
+		case TID_PMT:
+			return dumppmt(stream, table, complete);
+		case TID_DVB_NIT:
+			return dumpdvbnit(stream, table, complete);
+		default:
+			printf("0x%04x - Unknown table ID 0x%02x\n", (unsigned int) table->pid, table->tableid);
+	}
+	return 0;
+}
+
+static void
+usage(const char *progname)
+{
+	printf("Usage: %s [OPTIONS] FILE1 [... FILEn]\n\n", progname);
+	printf("Parse an MPEG-2 transport stream from one or more files. Specify '-' as a\n"
+		"filename to read from standard input.\n\n");
+	printf("  -h           Print this usage message\n");
+	printf("  -p           Show header details from each packet as it's read\n");
+	printf("  -H           Hex dump each packet as it's read (implies -p)\n");
+	printf("  -d           Print detailed information about each packet (implies -p)\n");
+	printf("  -s           Print a summary of the stream once complete\n");
+	printf("  -a           Attempt to automatically sync the stream\n");
+	printf("  -A           Source stream is AVCHD/Blu-Ray (disables -a)\n");
+	printf("\nIf no options are specified, defaults are to autosync (-a) and print a\n"
+		"final summary (-s).\n");
+}
+
+int
 main(int argc, char **argv)
 {
+	int showhex, showpackets, showsummary, showdetail;
 	int c, r;
 	FILE *fin;
 	ts_stream_t *stream;
@@ -140,15 +196,63 @@ main(int argc, char **argv)
 	ts_packet_t packet;
 	
 	memset(&options, 0, sizeof(options));
+	options.progname = argv[0];
 	options.timecode = 0;
 	options.autosync = 1;
 	options.synclimit = 256;
 	options.prepad = 0;
 	options.postpad = 0;
 	r = 0;
+	showhex = 0;
+	showpackets = 0;
+	showdetail = 0;
+	showsummary = -1;
+	while(-1 != (c = getopt(argc, argv, "hpHdsaA")))
+	{
+		switch(c)
+		{
+			case 'p':
+				showpackets = 1;
+				break;
+			case 'H':
+				showhex = showpackets = 1;
+				break;
+			case 'd':
+				showdetail = showpackets = 1;
+				break;
+			case 's':
+				showsummary = 1;
+				break;
+			case 'a':
+				options.autosync = 1;
+				options.timecode = 0;
+				break;
+			case 'A':
+				options.autosync = 0;
+				options.timecode = 1;
+				break;
+			case 'h':
+				usage(options.progname);
+				return 0;
+			case '?':
+				usage(options.progname);
+				return 1;
+		}
+	}
+	if(-1 == showsummary)
+	{
+		if(0 == showhex && 0 == showpackets && 0 == showdetail)
+		{
+			showsummary = 1;
+		}
+		else
+		{
+			showsummary = 0;
+		}
+	}
 	if(argc < 2)
 	{
-		fprintf(stderr, "Usage: %s [OPTIONS] FILE1 ... FILEn\n", argv[0]);
+		usage(options.progname);
 		return 1;
 	}
 	stream = ts_stream_create(&options);
@@ -170,73 +274,86 @@ main(int argc, char **argv)
 		}
 		if(fin)
 		{
-			fprintf(stderr, "Reading from %s\n", options.filename);
+			fprintf(stderr, "%s: Reading from %s\n", options.filename, argv[0]);
 			while(-1 != ts_stream_read_packetf(stream, &packet, fin))
 			{
 				if(packet.sync != 0x47)
 				{
-					printf("[0x%016llx] Sync byte does not match (expected 0x47, found 0x%02x)\n", stream->seq - 1, packet.sync);
+					fprintf(stderr, "%s: Sync byte does not match (expected 0x47, found 0x%02x)\n", options.filename, packet.sync);
 				}
-/*				printf("[0x%016llx] ", stream->seq - 1);
-				if(options.timecode)
+				if(1 == showpackets)
 				{
-					printf(" TC: %010lu  ", (unsigned long) packet.timecode);
-				}
-				printf(" Flags: ");
-				if(packet.transerr) { putchar('T'); } else { putchar('-'); }
-				if(packet.unitstart) { putchar('U'); } else { putchar('-'); }
-				if(packet.priority) { putchar('P'); } else { putchar('-'); }
-				if(packet.hasaf) { putchar('A'); } else { putchar('-'); }
-				if(packet.haspd) { putchar('D'); } else { putchar('-'); }
-				printf("   PID: 0x%04x ", packet.pid);
-				if(packet.pidinfo)
-				{
-					switch(packet.pidinfo->pidtype)
+					printf("[0x%016llx] ", stream->seq - 1);
+					if(options.timecode)
 					{
-						case PT_UNSPEC:
-							putchar('-');
-							break;
-						case PT_SECTIONS:
+						printf(" TC: %010lu  ", (unsigned long) packet.timecode);
+					}
+					printf(" Flags: ");
+					if(packet.transerr) { putchar('T'); } else { putchar('-'); }
+					if(packet.unitstart) { putchar('U'); } else { putchar('-'); }
+					if(packet.priority) { putchar('P'); } else { putchar('-'); }
+					if(packet.hasaf) { putchar('A'); } else { putchar('-'); }
+					if(packet.haspd) { putchar('D'); } else { putchar('-'); }
+					printf("   PID: 0x%04x ", packet.pid);
+					if(packet.pidinfo)
+					{
+						switch(packet.pidinfo->pidtype)
+						{
+							case PT_UNSPEC:
+								putchar('-');
+								break;
+							case PT_SECTIONS:
+								putchar('S');
+								break;
+							case PT_PES:
+								putchar('P');
+								break;
+							case PT_DATA:
+								putchar('D');
+								break;
+							case PT_NULL:
+								putchar('N');
+								break;
+							default:
+								putchar('?');
+								printf(" [%d] ", packet.pidinfo->pidtype);
+						}
+						if(packet.pidinfo->seen)
+						{
 							putchar('S');
-							break;
-						case PT_PES:
-							putchar('P');
-							break;
-						case PT_DATA:
+						}
+						else
+						{
+							putchar('-');
+						}
+						if(packet.pidinfo->defined)
+						{
 							putchar('D');
-							break;
-						case PT_NULL:
-							putchar('N');
-							break;
-						default:
-							putchar('?');
-							printf(" [%d] ", packet.pidinfo->pidtype);
-					}
-					if(packet.pidinfo->seen)
-					{
-						putchar('S');
+						}
+						else
+						{
+							putchar('-');
+						}
 					}
 					else
 					{
-						putchar('-');
+						putchar('?');
+						putchar('?');
+						putchar('?');
 					}
-					if(packet.pidinfo->defined)
-					{
-						putchar('D');
-					}
-					else
-					{
-						putchar('-');
-					}
+					putchar('\n');
 				}
-				else
+				if(1 == showhex)
 				{
-					putchar('?');
-					putchar('?');
-					putchar('?');
+					hexdump(&packet);
 				}
-				putchar('\n'); */
-/*				ts_hexdump(&packet); */
+				if(1 == showdetail)
+				{
+					if(packet.curtable)
+					{
+						dumptable(stream, packet.curtable, 0);
+					}
+				}
 			}
 			if(fin != stdin)
 			{
@@ -244,14 +361,17 @@ main(int argc, char **argv)
 			}
 		}
 	}
-	printf("Stream summary:\n");
-	if(NULL == stream->pat)
+	if(1 == showsummary)
 	{
-		printf("- Stream has no Program Association Table\n");
-	}
-	else
-	{
-		dumppat(stream, stream->pat);
+		printf("Stream summary:\n");
+		if(NULL == stream->pat)
+		{
+			printf("- Stream has no Program Association Table\n");
+		}
+		else
+		{
+			dumptable(stream, stream->pat, 1);
+		}
 	}
 	return r;
 }

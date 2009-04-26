@@ -101,6 +101,7 @@ struct ts_options_struct
 	uint8_t prepad;
 	uint8_t postpad;
 	uint16_t synclimit;
+	const char *progname;
 	const char *filename;
 	void *(*allocmem)(size_t nbytes);
 	void (*freemem)(void *ptr);
