@@ -188,9 +188,33 @@ usage(const char *progname)
 	printf("  -s           Print a summary of the stream once complete\n");
 	printf("  -a           Attempt to automatically sync the stream\n");
 	printf("  -A           Source stream is AVCHD/Blu-Ray (disables -a)\n");
-	printf("  -q           Halt as soon as the first PAT and PMT have been decoded\n");
+	printf("  -q           Halt as soon as the first PAT and PMT have been decoded\n"
+		"               (implies -s)\n");
 	printf("\nIf no options are specified, defaults are to autosync (-a) and print a\n"
-		"final summary (-s).\n");
+		"final summary (-s). Autosync is disabled if -A is specified (AVCHD/Blu-Ray\n"
+		"streams have a fixed format where a 32-bit timecode prefixes each packet).\n"
+		"If you know your source only contains a single program and you just want a\n"
+		"list of the elementary stream PIDs, use the -q option.\n"
+		"\n"
+		"Examples:\n"
+		"  tsdump -A 000001.MTS\n"
+		"      Read the AVCHD file 0000001.MTS and print a summary of the contents.\n\n"
+		"  dvbstream -o 8192 | tsdump -qp -\n"
+		"      Use dvbstream(1) to capture TS packets from a DVB tuner card, which\n"
+		"      tsdump will read from standard input. Halt as soon as a complete\n"
+		"      PAT and PMT have been read, and print a summary of each packet decoded.\n\n"
+		"Packet summary flags:\n"
+		"   T = Transport error       U = Unit start      P = Priority\n"
+		"   A = Adaption field present                    D = Payload present\n\n"
+		"Packet summary PID suffixes:\n"
+		"   1. PID type (U=unspec, S=sections, P=PES, D=data, N=null, ?=unknown)\n"
+		"   2. Seen flag (indicates that packets were decoded, always the case in\n"
+		"      in a packet summary)\n"
+		"   3. Defined flag (indicates that the PID was defined by a PAT or PMT)\n\n"
+		"   A suffix of '???' indicates that no information about the PID is\n"
+		"   available at the time of output. You may see this at the beginning of a\n"
+		"   DVB stream capture (prior to the PAT and PMTs being decoded).\n"
+		);
 }
 
 int
@@ -244,6 +268,7 @@ main(int argc, char **argv)
 				break;
 			case 'q':
 				quick = 1;
+				showsummary = 1;
 				break;
 			case 'h':
 				usage(options.progname);
