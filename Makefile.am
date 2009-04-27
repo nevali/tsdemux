@@ -1,2 +1,2 @@
 
-SUBDIRS = libtsdemux tsdump
+SUBDIRS = libtsdemux tsdump tsremux

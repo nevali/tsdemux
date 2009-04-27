@@ -79,7 +79,7 @@ ts__pmt_decode(ts_packet_t *packet)
 		bufp += infolen;
 		if(infolen > datalen)
 		{
-			printf(" - infolen (0x%02x) is greater than datalen (0x%02x)\n", infolen, datalen);
+/*			printf(" - infolen (0x%02x) is greater than datalen (0x%02x)\n", infolen, datalen); */
 			return -1;
 		}
 		datalen -= infolen;

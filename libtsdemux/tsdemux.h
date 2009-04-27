@@ -225,8 +225,10 @@ struct ts_packet_struct
 	ts_table_t *tables[8]; /* If this packet contains tables, pointers to them */
 	ts_table_t *curtable;
 	size_t payloadlen;
-	size_t plofs;
-	uint8_t payload[184]; /* If haspd is set */
+	size_t prepad; /* The offset of the packet header */
+	size_t plofs; /* The (current) offset of the packet payload */
+	size_t plstart; /* Start of the packet payload */ 
+	uint8_t payload[192]; /* If haspd is set */
 };
 
 struct ts_streamtype_struct
@@ -255,7 +257,7 @@ extern "C" {
 	 * is present, in which case the packet will be prepended with a 32-bit
 	 * timecode value, resulting in a total of 192 bytes.
 	 */
-	int ts_stream_read_packet(ts_stream_t *stream, ts_packet_t *dest, const uint8_t *bufp);
+	int ts_stream_read_packet(ts_stream_t *stream, ts_packet_t *dest, const uint8_t *bufp, size_t prepad);
 	
 	/* Retrieve the table with the given table_id (and optional PID) */
 	ts_table_t *ts_stream_table_get(ts_stream_t *stream, uint8_t tableid, uint16_t pid);

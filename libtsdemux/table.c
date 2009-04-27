@@ -13,7 +13,7 @@ ts__table_decode(ts_packet_t *packet, uint16_t progid)
 	
 	memset(&table, 0, sizeof(table));
 	bufp = &(packet->payload[packet->plofs]);
-	if(0 == packet->plofs && 1 == packet->unitstart)
+	if(packet->plstart == packet->plofs && 1 == packet->unitstart)
 	{
 		packet->plofs += bufp[0] + 1;
 		bufp += bufp[0] + 1;
@@ -77,7 +77,7 @@ ts__table_decode(ts_packet_t *packet, uint16_t progid)
 					tpp->occurrences++;
 					if(1 == table.curnext && 0 == tpp->curnext)
 					{
-						printf(" - Activating table\n");
+						fprintf(stderr, "%s: Activating table\n", packet->stream->opts->filename);
 						ts__stream_table_activate(packet->stream, tpp);
 						return 1;
 					}
@@ -93,7 +93,7 @@ ts__table_decode(ts_packet_t *packet, uint16_t progid)
 				if(tpp->version == table.version)
 				{
 					tpp->occurrences++;
-					printf(" - Repeated out of date table version 0x%02x, skipping\n", table.version);
+					fprintf(stderr, "%s: Repeated out of date table version 0x%02x, skipping\n", packet->stream->opts->filename, table.version);
 					return 1;
 				}
 			}
@@ -113,7 +113,7 @@ ts__table_decode(ts_packet_t *packet, uint16_t progid)
 			return ts__pmt_decode(packet);
 			break;
 		default:
-			printf(" -- Unhandled table 0x%02x\n", table.tableid);
+			fprintf(stderr, "%s: Unhandled table 0x%02x\n", packet->stream->opts->filename, table.tableid);
 	}
 	return 1;
 }
@@ -212,6 +212,6 @@ ts__stream_table_expect(ts_stream_t *stream, uint8_t tableid, uint16_t pid)
 int
 ts__stream_table_activate(ts_stream_t *stream, ts_table_t *table)
 {
-	printf("Activating table 0x%02x (PID 0x%04x)\n", table->tableid, table->pid);
+	fprintf(stderr, "%s: Activating table 0x%02x (PID 0x%04x)\n", stream->opts->filename, table->tableid, table->pid);
 	return 0;
 }

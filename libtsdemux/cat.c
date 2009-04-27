@@ -7,6 +7,6 @@
 int
 ts__cat_decode(ts_packet_t *packet)
 {
-	printf(" -- Conditional Access Table\n");
+/*	printf(" -- Conditional Access Table\n"); */
 	return 0;
 }

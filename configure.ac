@@ -38,6 +38,7 @@ AC_CONFIG_HEADER([config.h])
 AC_CONFIG_FILES([Makefile
 libtsdemux/Makefile
 tsdump/Makefile
+tsremux/Makefile
 ])
 
 AC_OUTPUT
